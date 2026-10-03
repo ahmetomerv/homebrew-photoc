@@ -1,0 +1,96 @@
+name: Propose photoc release
+
+on:
+  repository_dispatch:
+    types: [photoc_release_published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Published stable photoc tag, for example v0.5.1
+        required: true
+        type: string
+
+permissions: {}
+
+defaults:
+  run:
+    shell: bash -euo pipefail {0}
+
+jobs:
+  propose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      RELEASE_TAG: ${{ github.event.client_payload.tag || inputs.tag }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      HOMEBREW_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Set up Homebrew
+        id: set-up-homebrew
+        uses: Homebrew/actions/setup-homebrew@848c272c7bfe984a197bd4d16383f4c106ec61e6 # 2026.09.21.1
+
+      - name: Set up git
+        uses: Homebrew/actions/git-user-config@848c272c7bfe984a197bd4d16383f4c106ec61e6 # 2026.09.21.1
+
+      - name: Verify release and calculate source checksum
+        id: source
+        env:
+          TAP_NAME: ${{ steps.set-up-homebrew.outputs.tap-name }}
+        run: |
+          if [[ ! "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "Expected a stable vMAJOR.MINOR.PATCH tag" >&2
+            exit 1
+          fi
+          version="${RELEASE_TAG#v}"
+          release_state=$(gh release view "$RELEASE_TAG" --repo ahmetomerv/photoc \
+            --json tagName,isDraft,isPrerelease \
+            --jq '[.tagName, .isDraft, .isPrerelease] | @tsv')
+          if [[ "$release_state" != "$RELEASE_TAG"$'\tfalse\tfalse' ]]; then
+            echo "Release $RELEASE_TAG is not published and stable" >&2
+            exit 1
+          fi
+
+          url="https://github.com/ahmetomerv/photoc/archive/refs/tags/$RELEASE_TAG.tar.gz"
+          archive="$RUNNER_TEMP/photoc-$RELEASE_TAG.tar.gz"
+          curl --fail --location --retry 3 "$url" --output "$archive"
+          archived_version=$(tar -xOf "$archive" "photoc-$version/VERSION")
+          if [[ "$archived_version" != "$version" ]]; then
+            echo "Source archive VERSION does not match $RELEASE_TAG" >&2
+            exit 1
+          fi
+          sha256=$(sha256sum "$archive" | cut -d ' ' -f 1)
+
+          current_version=$(brew info --json=v2 "$TAP_NAME/photoc" \
+            | jq -r '.formulae[0].versions.stable')
+          comparison=$(python3 - "$version" "$current_version" <<'PY'
+          import sys
+          new, current = (tuple(map(int, value.split("."))) for value in sys.argv[1:])
+          print((new > current) - (new < current))
+          PY
+          )
+          if [[ "$comparison" != 1 ]]; then
+            echo "Tap already has photoc $current_version; no update for $version"
+            exit 0
+          fi
+
+          existing_pr=$(gh pr list --repo "$GITHUB_REPOSITORY" --state open \
+            --search "photoc $version in:title" --json number --jq '.[0].number // empty')
+          if [[ -n "$existing_pr" ]]; then
+            echo "Tap PR #$existing_pr already targets photoc $version"
+            exit 0
+          fi
+
+          printf 'update=true\nurl=%s\nsha256=%s\n' "$url" "$sha256" >> "$GITHUB_OUTPUT"
+
+      - name: Open formula update PR
+        if: steps.source.outputs.update == 'true'
+        env:
+          TAP_NAME: ${{ steps.set-up-homebrew.outputs.tap-name }}
+          SOURCE_URL: ${{ steps.source.outputs.url }}
+          SOURCE_SHA256: ${{ steps.source.outputs.sha256 }}
+        run: |
+          brew bump-formula-pr --no-fork --no-browse --strict --online \
+            --url "$SOURCE_URL" --sha256 "$SOURCE_SHA256" "$TAP_NAME/photoc"
