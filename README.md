@@ -1,18 +1,24 @@
-# Ahmetomerv Photoc
+# photoc Homebrew tap
 
-## How do I install these formulae?
+This tap provides a source-building Homebrew formula for
+[`photoc`](https://github.com/ahmetomerv/photoc).
 
-`brew install ahmetomerv/photoc/<formula>`
-
-Or `brew tap ahmetomerv/photoc` and then `brew install <formula>`.
-
-Or, in a `brew bundle` `Brewfile`:
-
-```ruby
-tap "ahmetomerv/photoc"
-brew "<formula>"
+```sh
+brew install ahmetomerv/photoc/photoc
 ```
 
-## Documentation
+After installation, run `brew update` and `brew upgrade photoc` to install a
+newer formula version. To use `brew install photoc` by its short name, first
+trust this formula with `brew trust --formula ahmetomerv/photoc/photoc`.
 
-`brew help`, `man brew` or check [Homebrew's documentation](https://docs.brew.sh).
+## Updates
+
+The photoc release workflow requests a formula update after publishing a stable
+GitHub release. The [Propose photoc release](.github/workflows/photoc-release.yml)
+workflow verifies that release, calculates its tagged source archive checksum,
+and opens a pull request. It does not merge automatically. Review the formula
+diff and wait for the tap's `brew test-bot` checks before merging.
+
+The [manual Homebrew release checklist](https://github.com/ahmetomerv/photoc/blob/main/docs/homebrew-releases.md)
+describes how to update or repair the formula yourself. The `brew bump` workflow
+can also be started manually as a fallback.
