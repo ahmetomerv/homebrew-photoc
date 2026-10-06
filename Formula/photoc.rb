@@ -1,8 +1,8 @@
 class Photoc < Formula
   desc "Command-line tools for managing photos"
   homepage "https://github.com/ahmetomerv/photoc"
-  url "https://github.com/ahmetomerv/photoc/archive/refs/tags/v0.5.0.tar.gz"
-  sha256 "d63383d580df5c5ec22e77748b8327b2726b82ce98eaebe4734a96a909fa6b5a"
+  url "https://github.com/ahmetomerv/photoc/archive/refs/tags/v0.6.0.tar.gz"
+  sha256 "e570de104f1e802d4cca2a5842abe513bba9ada76643807b87a17861844fa456"
   license "MIT"
 
   depends_on "cmake" => :build
